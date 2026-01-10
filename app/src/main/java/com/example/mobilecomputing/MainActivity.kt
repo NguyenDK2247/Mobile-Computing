@@ -104,22 +104,22 @@ fun MessageCard(msg: Message) {
     }
 }
 
-@Preview(name = "Light Mode")
-@Preview(
-    uiMode = Configuration.UI_MODE_NIGHT_YES,
-    showBackground = true,
-    name = "Dark Mode"
-)
-@Composable
-fun PreviewMessageCard() {
-    MobileComputingTheme {
-        Surface {
-            MessageCard(
-                msg = Message("Lexi", "Take a look at Jetpack Compose, it's great!")
-            )
-        }
-    }
-}
+//@Preview(name = "Light Mode")
+//@Preview(
+//    uiMode = Configuration.UI_MODE_NIGHT_YES,
+//    showBackground = true,
+//    name = "Dark Mode"
+//)
+//@Composable
+//fun PreviewMessageCard() {
+//    MobileComputingTheme {
+//        Surface {
+//            MessageCard(
+//                msg = Message("Lexi", "Take a look at Jetpack Compose, it's great!")
+//            )
+//        }
+//    }
+//}
 
 @Composable
 fun Conversation(messages: List<Message>) {
