@@ -1,3 +1,5 @@
+// Branch HW2
+
 package com.example.mobilecomputing
 
 import android.os.Bundle
