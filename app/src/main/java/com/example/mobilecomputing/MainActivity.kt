@@ -20,6 +20,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.mobilecomputing.ui.theme.MobileComputingTheme
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,8 +30,10 @@ class MainActivity : ComponentActivity() {
                 // Create a NavHost with NavController
                 val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = "main") {
-                    composable("main") { MainScreen(navController) }
-                    composable("complex") { ComplexScreen(navController) }
+                    composable("main") { MainScreen(onNavigateToComplex = { navController.navigate("complex") }) }
+                    composable("complex") { ComplexScreen(onNavigateBack = {
+                        navController.popBackStack()
+                    }) }
                 }
             }
         }
@@ -38,7 +41,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(navController: NavController) {
+fun MainScreen(onNavigateToComplex: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier
@@ -49,7 +52,7 @@ fun MainScreen(navController: NavController) {
         ) {
             Text("Main Screen")
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { navController.navigate("complex") }) {
+            Button(onClick = { onNavigateToComplex() }) {
                 Text("Go to Complex Screen")
             }
         }
@@ -57,7 +60,7 @@ fun MainScreen(navController: NavController) {
 }
 
 @Composable
-fun ComplexScreen(navController: NavController) {
+fun ComplexScreen(onNavigateBack: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier
@@ -68,11 +71,7 @@ fun ComplexScreen(navController: NavController) {
         ) {
             Text("Complex Screen")
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = {
-                navController.navigate("main") {
-                    popUpTo("main") { inclusive = true }
-                }
-            }) {
+            Button(onClick = { onNavigateBack() }) {
                 Text("Back to Main Screen")
             }
         }
@@ -82,11 +81,13 @@ fun ComplexScreen(navController: NavController) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewMainScreen() {
-    MobileComputingTheme { MainScreen(navController = rememberNavController()) }
+    MobileComputingTheme { MainScreen(onNavigateToComplex = {}) }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewComplexScreen() {
-    MobileComputingTheme { ComplexScreen(navController = rememberNavController()) }
+    MobileComputingTheme { ComplexScreen(onNavigateBack = {}) }
 }
+
+
