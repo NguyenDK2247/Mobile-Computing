@@ -2,10 +2,26 @@
 
 package com.example.mobilecomputing
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
@@ -27,14 +43,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import android.provider.Settings
+import android.util.Log
+import androidx.activity.compose.ManagedActivityResultLauncher
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.Color
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.example.mobilecomputing.ui.theme.MobileComputingTheme
 
 
@@ -58,6 +84,9 @@ data class Message(val author: String, val body: String)
 
 @Composable
 fun MainScreen(navController: NavHostController) {
+
+    AcceleratorMonitor()
+
     var buttonClicked by remember { mutableStateOf(false) }
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -100,11 +129,237 @@ fun MainScreen(navController: NavHostController) {
                             ) {
                                 Text("Go!")
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            enableNotificationButton()
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun enableNotificationButton() {
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(context, "Notifications enabled", Toast.LENGTH_SHORT).show()
+            showNotification(context)
+        } else {
+            Toast.makeText(context, "Notifications permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Button(
+        onClick = {
+            enableNotifications(context, permissionLauncher)
+        },
+    ) {
+        Text("Enable Notifications")
+    }
+}
+
+private fun enableNotifications(
+    context: Context,
+    permissionLauncher: ManagedActivityResultLauncher<String, Boolean>
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                Toast.makeText(context, "Notifications already enabled", Toast.LENGTH_SHORT).show()
+            }
+            else -> {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    } else {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (notificationManager.areNotificationsEnabled()) {
+            Toast.makeText(context, "Notifications already enabled", Toast.LENGTH_SHORT).show()
+        } else {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+            }
+            context.startActivity(intent)
+        }
+    }
+}
+
+private fun showNotification(context: Context) {
+    val channelId = "default_channel"
+    val notificationId = 1
+
+    // Create notification channel (required for Android 8.0+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            channelId,
+            "Default Notifications",
+            NotificationManager.IMPORTANCE_HIGH // Changed to HIGH
+        ).apply {
+            description = "Default notification channel"
+            enableVibration(true)
+            enableLights(true)
+        }
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    // Create an Intent to open the app
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+
+    // Create PendingIntent
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    // Build the notification
+    val notification = NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info) // Replace with your app icon
+        .setContentTitle("Notifications Enabled!")
+        .setContentText("You will be notified when the device receives notifications")
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setContentIntent(pendingIntent)
+        .build()
+
+    // Show the notification
+    val notificationManager = NotificationManagerCompat.from(context)
+    if (ActivityCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    ) {
+        notificationManager.notify(notificationId, notification)
+    }
+}
+
+@Composable
+fun AcceleratorMonitor() {
+    val context = LocalContext.current
+    var accelData by remember { mutableStateOf("Waiting for accelerometer data...") }
+
+    DisposableEffect(Unit) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        var lastX = 0f
+        var lastY = 0f
+        var lastZ = 0f
+        val threshold = 0.01f // Minimum change to trigger notification (in m/s²)
+
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                event?.let {
+                    val x = it.values[0]
+                    val y = it.values[1]
+                    val z = it.values[2]
+
+                    // Update display with actual current values
+                    accelData = "X: %.2f m/s²\nY: %.2f m/s²\nZ: %.2f m/s²".format(x, y, z)
+
+                    // Calculate the difference from last reading
+                    val deltaX = Math.abs(x - lastX)
+                    val deltaY = Math.abs(y - lastY)
+                    val deltaZ = Math.abs(z - lastZ)
+
+                    // Only send notification if there's a significant change
+                    if (deltaX > threshold || deltaY > threshold || deltaZ > threshold) {
+                        showAccelerometerNotification(context, x, y, z)
+                        lastX = x
+                        lastY = y
+                        lastZ = z
+                    }
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        if (accelerometer != null) {
+            sensorManager.registerListener(
+                listener,
+                accelerometer,
+                SensorManager.SENSOR_DELAY_GAME
+            )
+        } else {
+            accelData = "Accelerometer not available"
+        }
+
+        onDispose {
+            sensorManager.unregisterListener(listener)
+        }
+    }
+}
+
+private fun showAccelerometerNotification(context: Context, x: Float, y: Float, z: Float) {
+    val channelId = "accelerometer_channel"
+    val notificationId = 1001
+
+    // Create notification channel with HIGH importance
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            channelId,
+            "Accelerometer Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Notifications for accelerometer sensor changes"
+            enableVibration(true)
+            enableLights(true)
+        }
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    // Create an Intent to open the app
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    // Build the notification
+    val notification = NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle("Acceleration Detected")
+        .setContentText("X: %.2f, Y: %.2f, Z: %.2f m/s²".format(x, y, z))
+        .setStyle(NotificationCompat.BigTextStyle()
+            .bigText("Accelerometer reading:\nX-axis: %.2f m/s²\nY-axis: %.2f m/s²\nZ-axis: %.2f m/s²".format(x, y, z)))
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setAutoCancel(true)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setContentIntent(pendingIntent)
+        .build()
+
+    // Show the notification
+    val notificationManager = NotificationManagerCompat.from(context)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationManager.notify(notificationId, notification)
+        }
+    } else {
+        notificationManager.notify(notificationId, notification)
     }
 }
 
