@@ -1,4 +1,4 @@
-// Branch HW3
+// Branch HW4
 
 package com.example.mobilecomputing
 
@@ -84,7 +84,7 @@ data class Message(val author: String, val body: String)
 
 @Composable
 fun MainScreen(navController: NavHostController) {
-
+    // call the function to display the accelerator notification
     AcceleratorMonitor()
 
     var buttonClicked by remember { mutableStateOf(false) }
@@ -131,7 +131,7 @@ fun MainScreen(navController: NavHostController) {
                             }
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            enableNotificationButton()
+                            EnableNotificationButton()
                         }
                     }
                 }
@@ -141,14 +141,14 @@ fun MainScreen(navController: NavHostController) {
 }
 
 @Composable
-private fun enableNotificationButton() {
+private fun EnableNotificationButton() {
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
             Toast.makeText(context, "Notifications enabled", Toast.LENGTH_SHORT).show()
-            showNotification(context)
+            ShowNotification(context)
         } else {
             Toast.makeText(context, "Notifications permission denied", Toast.LENGTH_SHORT).show()
         }
@@ -156,14 +156,14 @@ private fun enableNotificationButton() {
 
     Button(
         onClick = {
-            enableNotifications(context, permissionLauncher)
+            EnableNotifications(context, permissionLauncher)
         },
     ) {
         Text("Enable Notifications")
     }
 }
 
-private fun enableNotifications(
+private fun EnableNotifications(
     context: Context,
     permissionLauncher: ManagedActivityResultLauncher<String, Boolean>
 ) {
@@ -192,16 +192,17 @@ private fun enableNotifications(
     }
 }
 
-private fun showNotification(context: Context) {
+private fun ShowNotification(context: Context) {
     val channelId = "default_channel"
     val notificationId = 1
 
-    // Create notification channel (required for Android 8.0+)
+    // create notification channel (required for Android 8.0+)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val channel = NotificationChannel(
             channelId,
             "Default Notifications",
-            NotificationManager.IMPORTANCE_HIGH // Changed to HIGH
+            // this shows the notification as a drop-down banner
+            NotificationManager.IMPORTANCE_HIGH 
         ).apply {
             description = "Default notification channel"
             enableVibration(true)
@@ -211,12 +212,12 @@ private fun showNotification(context: Context) {
         notificationManager.createNotificationChannel(channel)
     }
 
-    // Create an Intent to open the app
+    // give functionality to tapping on the notification
     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
 
-    // Create PendingIntent
+    // create PendingIntent
     val pendingIntent = PendingIntent.getActivity(
         context,
         0,
@@ -224,17 +225,19 @@ private fun showNotification(context: Context) {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    // Build the notification
+    // build the notification
     val notification = NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(android.R.drawable.ic_dialog_info) // Replace with your app icon
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
         .setContentTitle("Notifications Enabled!")
         .setContentText("You will be notified when the device receives notifications")
+        // this shows the notification as a drop-down banner
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
+        // assign functionality for tapping on the notification
         .setContentIntent(pendingIntent)
         .build()
 
-    // Show the notification
+    // show the notification
     val notificationManager = NotificationManagerCompat.from(context)
     if (ActivityCompat.checkSelfPermission(
             context,
@@ -257,7 +260,7 @@ fun AcceleratorMonitor() {
         var lastX = 0f
         var lastY = 0f
         var lastZ = 0f
-        val threshold = 0.01f // Minimum change to trigger notification (in m/s²)
+        val threshold = 0.01f // minimum change to trigger notification (in m/s²)
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
@@ -266,17 +269,17 @@ fun AcceleratorMonitor() {
                     val y = it.values[1]
                     val z = it.values[2]
 
-                    // Update display with actual current values
+                    // update display with actual current values
                     accelData = "X: %.2f m/s²\nY: %.2f m/s²\nZ: %.2f m/s²".format(x, y, z)
 
-                    // Calculate the difference from last reading
+                    // calculate the difference from last reading
                     val deltaX = Math.abs(x - lastX)
                     val deltaY = Math.abs(y - lastY)
                     val deltaZ = Math.abs(z - lastZ)
 
-                    // Only send notification if there's a significant change
+                    // only send notification if there's a change detected
                     if (deltaX > threshold || deltaY > threshold || deltaZ > threshold) {
-                        showAccelerometerNotification(context, x, y, z)
+                        ShowAccelerometerNotification(context, x, y, z)
                         lastX = x
                         lastY = y
                         lastZ = z
@@ -303,15 +306,16 @@ fun AcceleratorMonitor() {
     }
 }
 
-private fun showAccelerometerNotification(context: Context, x: Float, y: Float, z: Float) {
+private fun ShowAccelerometerNotification(context: Context, x: Float, y: Float, z: Float) {
     val channelId = "accelerometer_channel"
     val notificationId = 1001
 
-    // Create notification channel with HIGH importance
+    // create notification channel
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val channel = NotificationChannel(
             channelId,
             "Accelerometer Alerts",
+            // this shows the notification as a drop-down banner
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Notifications for accelerometer sensor changes"
@@ -322,7 +326,7 @@ private fun showAccelerometerNotification(context: Context, x: Float, y: Float, 
         notificationManager.createNotificationChannel(channel)
     }
 
-    // Create an Intent to open the app
+    // create an Intent to open the app
     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
@@ -334,21 +338,23 @@ private fun showAccelerometerNotification(context: Context, x: Float, y: Float, 
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    // Build the notification
+    // build the notification
     val notification = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(android.R.drawable.ic_dialog_info)
         .setContentTitle("Acceleration Detected")
         .setContentText("X: %.2f, Y: %.2f, Z: %.2f m/s²".format(x, y, z))
         .setStyle(NotificationCompat.BigTextStyle()
             .bigText("Accelerometer reading:\nX-axis: %.2f m/s²\nY-axis: %.2f m/s²\nZ-axis: %.2f m/s²".format(x, y, z)))
+        // this shows the notification as a drop-down banner
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setDefaults(NotificationCompat.DEFAULT_ALL)
         .setAutoCancel(true)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        // assign functionality for tapping on the notification
         .setContentIntent(pendingIntent)
         .build()
 
-    // Show the notification
+    // show the notification
     val notificationManager = NotificationManagerCompat.from(context)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         if (ActivityCompat.checkSelfPermission(
