@@ -1,3 +1,5 @@
+// This is just for the fixed message column from HW1
+
 package com.example.mobilecomputing
 
 /**
