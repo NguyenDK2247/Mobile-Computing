@@ -857,9 +857,323 @@ var locationPermissionGranted by remember {
 `Notifications.kt`, `ApiScreen.kt` and `VideoScreen.kt`
 
 ### 7. Camera
+* Can be accessed via "📷 Camera" button
+* The code for this is from `CameraScreen.kt`:
+``` kotlin
+@Composable
+fun CameraScreen(navController: NavHostController) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var cameraPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> cameraPermissionGranted = granted }
+
+    val capturedPhotos = remember { mutableStateListOf<android.net.Uri>() }
+    var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    val cameraExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose { cameraExecutor.shutdown() }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { navController.popBackStack() }) { Text("← Back") }
+            Spacer(modifier = Modifier.weight(1f))
+            Text("Camera", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        if (!cameraPermissionGranted) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Camera permission is required.")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(onClick = { permLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Text("Grant Camera Permission")
+                }
+            }
+            return@Column
+        }
+
+        AndroidView(
+            factory = { ctx ->
+                val previewView = PreviewView(ctx)
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = Preview.Builder().build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+                    val capture = ImageCapture.Builder()
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .build()
+                    imageCapture = capture
+                    try {
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            capture
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
+                previewView
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Button(
+                onClick = {
+                    val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                        .format(System.currentTimeMillis())
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MobileApp")
+                        }
+                    }
+                    val outputOptions = ImageCapture.OutputFileOptions.Builder(
+                        context.contentResolver,
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        contentValues
+                    ).build()
+
+                    imageCapture?.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                output.savedUri?.let { capturedPhotos.add(it) }
+                            }
+                            override fun onError(exc: ImageCaptureException) {
+                                exc.printStackTrace()
+                            }
+                        }
+                    )
+                },
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+            ) {
+                Text("📷")
+            }
+        }
+
+        if (capturedPhotos.isNotEmpty()) {
+            Text(
+                "Captured (${capturedPhotos.size})",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(capturedPhotos) { uri ->
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "Captured photo",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+                    )
+                }
+            }
+        }
+    }
+}
+```
+* The camera allows the user to not only capture screenshots and view
+them in Gallery, but also move the camera around as well.
+* WASD keys for 4-directional movement, QE for altitude change, and
+mouse or arrow keys to rotate the view. 
+* Always ensuring 360 views.
 
 ### 8. Microphone
+* Can be accessed via "🎙 Mic" button.
+* The code of this is from `MicScreen.kt`:
+``` kotlin
+@Composable
+fun MicrophoneScreen(navController: NavHostController) {
+    val context = LocalContext.current
 
-### Weekly design assignments that are included here: 3, 4, 5, 7
-* They are included in a `.zip` file that also contains a video recording to the functionalities
-of this app.
+    var micPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> micPermissionGranted = granted }
+
+    var isRecording by remember { mutableStateOf(false) }
+    var hasRecording by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("Ready") }
+
+    val outputFile = remember { File(context.filesDir, "audio_recording.3gp") }
+
+    var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var player by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder?.release()
+            player?.release()
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { navController.popBackStack() }) { Text("← Back") }
+            Spacer(modifier = Modifier.weight(1f))
+            Text("Microphone", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.weight(1f))
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Permission gate
+            if (!micPermissionGranted) {
+                Text("Microphone permission is required to record audio.")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(onClick = { permLauncher.launch(Manifest.permission.RECORD_AUDIO) }) {
+                    Text("Grant Microphone Permission")
+                }
+                return@Column
+            }
+
+            // Status
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = statusText,
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = {
+                    if (!isRecording) {
+                        val rec = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            MediaRecorder(context)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            MediaRecorder()
+                        }
+                        rec.apply {
+                            setAudioSource(MediaRecorder.AudioSource.MIC)
+                            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+                            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+                            setOutputFile(outputFile.absolutePath)
+                            prepare()
+                            start()
+                        }
+                        recorder = rec
+                        isRecording = true
+                        statusText = "🔴 Recording…"
+                    } else {
+                        // Stop recording
+                        recorder?.apply { stop(); release() }
+                        recorder = null
+                        isRecording = false
+                        hasRecording = true
+                        statusText = "Recording saved ✔"
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRecording) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(if (isRecording) "Stop Recording" else "Start Recording")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (hasRecording) {
+                Button(
+                    onClick = {
+                        if (!isPlaying) {
+                            val mp = MediaPlayer().apply {
+                                setDataSource(outputFile.absolutePath)
+                                prepare()
+                                setOnCompletionListener {
+                                    isPlaying = false
+                                    statusText = "Playback finished"
+                                }
+                                start()
+                            }
+                            player = mp
+                            isPlaying = true
+                            statusText = "▶ Playing…"
+                        } else {
+                            player?.apply { stop(); release() }
+                            player = null
+                            isPlaying = false
+                            statusText = "Playback stopped"
+                        }
+                    }
+                ) {
+                    Text(if (isPlaying) "Stop Playback" else "Play Recording")
+                }
+            }
+        }
+    }
+}
+```
+* The user can record their voice or anything for that matter by hitting the "Start Recording" button.
+* After the user finishes the recording, they can immediately review the recording they just made.
